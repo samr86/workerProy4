@@ -1,4 +1,3 @@
-require 'mysql2'
 require 'streamio-ffmpeg'
 require 'rubygems'
 require 'net/smtp'
