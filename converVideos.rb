@@ -172,6 +172,7 @@ mensajes.messages.each do |m|
 	s3.ObtenerVideoOriginal rutaorigi
 	arcVideo = rutaorigi.split('proyecto3').last.split('/').last
         arcVideoConv = rutaorigi.split('proyecto3').last.split('/').last + '_concert.mp4'
+	puts "obtuvo video original"
 	ConversionVideo arcVideo,arcVideoConv 
 	s3.SubirVideoConvert arcVideoConv
 	dynamo.ActualizarVideoCovertido m.body.to_s,"https://s3-us-east-2.amazonaws.com/proyecto3/" + arcVideoConv
