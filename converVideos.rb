@@ -1,7 +1,5 @@
 require 'rubygems'
-require 'net/smtp'
 require 'aws-sdk'
-require 'aws-sdk-sqs'
 require 'open-uri'
 
 class ConexionSQS
@@ -10,7 +8,7 @@ class ConexionSQS
 		@queue_url = "https://sqs.us-east-2.amazonaws.com/232651884417/conversionvideos"
 	end
 	def LeerCola
-		@resp = @sqs.receive_message(queue_url: @queue_url, max_number_of_messages: 1)
+		@resp = @sqs.receive_message(queue_url: @queue_url, max_number_of_messages: 5)
 	end
 	def Invisibilizar mensaje
 		@sqs.change_message_visibility({
@@ -126,26 +124,43 @@ def ConversionVideo arcVideoOri,arcVideoConv
 end
 
 def NotificaEmail email,nombre
+	encoding  = 'UTF-8'
+	textbody = 'el video ha sido publicado'
+	subject  = 'video publicado'
+	sender = 'sa.melo@uniandes.edu.co' 
 	message = <<MESSAGE_END
-From: ConcursoVideos <cloudgrupo3@gmail.com>
-To: #{nombre}  <#{email}>
-MIME-Version: 1.0
-Content-type: text/html
-Subject: Video Publicado
 <b>El video ha sido publicado.</b>
 <h1>por favor visite la pagina del consurso.</h1>
 MESSAGE_END
 	puts message
+	ses = Aws::SES::Client.new(region: 'us-east-1')
+	resp = ses.send_email({
+    		destination: {
+    			to_addresses: [
+      				email,
+      			],
+    		},
+    		message: {
+      			body: {
+        			html: {
+          			charset: encoding,
+          			data: message,
+        			},
+        		text: {
+          			charset: encoding,
+          			data: textbody,
+        			},
+      			},
+    			subject: {
+      				charset: encoding,
+      				data: subject,
+    			},
+  		},
+  		source: sender,
+  		})	
 
-	server = 'smtp.gmail.com'
-	mail_from_domain = 'gmail.com'
-	port = 587      # or 25 - double check with your provider
-	username = 'cloudgrupo3@gmail.com'
-	password = 'grupo3clouduniandes'
-	smtp = Net::SMTP.new(server, port)
-	smtp.enable_starttls_auto
-	smtp.start(server,username,password, :plain)
-	smtp.send_message(message,'ConcursoVideos',email)
+
+
 end
 
 puts "INICIO DEL PROGRAMA DE CONVERSION"
