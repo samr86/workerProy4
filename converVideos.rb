@@ -1,4 +1,3 @@
-require 'streamio-ffmpeg'
 require 'rubygems'
 require 'net/smtp'
 require 'aws-sdk'
@@ -82,6 +81,7 @@ end
 class ConexionS3
 	def initialize
                 @s3 = Aws::S3::Client.new(region: 'us-east-2')
+		@s32 = Aws::S3::Client.new(region: 'us-east-1')
         end
 	def ObtenerVideoOriginal rutaS3
 		rutaArch = rutaS3.split('proyecto3').last.split('/').last
@@ -92,43 +92,37 @@ class ConexionS3
 	end
 	def SubirVideoConvert archivoConvert
 		File.open(archivoConvert, "r") do |aFile|
-            		@s3.put_object(bucket: 'proyecto3', key: archivoConvert, body: aFile)
+            		@s32.put_object(bucket: 'p4videos-originales', key: archivoConvert, body: aFile)
         	end
 	end
+	
+	def SubirVideoSinConvert archivoOrigi, archivoConvert
+                File.open(archivoOrigi, "r") do |aFile|
+                        @s32.put_object(bucket: 'p4videos-convertidos', key: archivoConvert, body: aFile)
+                end
+        end
 end
 
-def EliminaArchivos arcVideoOri,arcVideoConv
+def EliminaArchivos arcVideoOri
 	system('rm ' + arcVideoOri)
-	system('rm ' + arcVideoConv)
 end
 
 def ConversionVideo arcVideoOri,arcVideoConv
 	puts arcVideoOri + ' ' + arcVideoConv
-	video = FFMPEG::Movie.new(arcVideoOri)
-	puts video.valid?
-	puts video.video_codec
-	puts video.audio_codec.to_s
-	if video.valid?
-		puts "se pudo leer el video y se procede a convertir: " + video.video_codec + ' ' + video.audio_codec.to_s
-		if video.video_codec == "h264" and video.audio_codec.to_s == "aac"
-			system('cp ' + arcVideoOri + ' ' + arcVideoConv)
-			@fileSize = video.size
-		else 
-			#options = {video_codec: "h264",audio_codec: "aac"}
-			options = {video_codec: "libx264",audio_codec: "aac"}
-                        options = {video_codec: "libx264",audio_codec: "mp3"}
-			#transcoder_options = { validate: false }
-			#options = {video_codec: "h264"}
-			video.transcode(arcVideoConv, options) { |progress| puts progress }
-			videoConv = FFMPEG::Movie.new(arcVideoConv)
-			if videoConv.valid?
-				puts "se pudo leer convertido"
-			end
-			@fileSize = videoConv.size
-		end
-	else
-		puts "video no se pudo leer"
-	end
+	presetId = '1351620000001-100070' # ID for the sytem web preset
+	elastictranscoder = Aws::ElasticTranscoder::Client.new(region: 'us-east-1')
+	pipelineId =  '1510106586284-5xnwhp'
+	job_options = {}
+	job_options[:pipeline_id] = pipelineId
+	job_options[:input] = {
+		key: arcVideoOri
+	}
+	job_options[:output] = {
+		key: arcVideoConv,
+		preset_id: presetId,
+		thumbnail_pattern: "{count}-#{arcVideoOri}"
+	}
+	job = elastictranscoder.create_job(job_options)
 end
 
 def NotificaEmail email,nombre
@@ -171,13 +165,17 @@ mensajes.messages.each do |m|
 	nombre = dynamo.getnombre
 	s3.ObtenerVideoOriginal rutaorigi
 	arcVideo = rutaorigi.split('proyecto3').last.split('/').last
-        arcVideoConv = rutaorigi.split('proyecto3').last.split('/').last + '_concert.mp4'
-	puts "obtuvo video original"
-	ConversionVideo arcVideo,arcVideoConv 
-	s3.SubirVideoConvert arcVideoConv
-	dynamo.ActualizarVideoCovertido m.body.to_s,"https://s3-us-east-2.amazonaws.com/proyecto3/" + arcVideoConv
+        arcVideoConv = rutaorigi.split('proyecto3').last.split('/').last + '_convert.mp4'
+	puts "extencion " + arcVideo.split('.').last
+	if arcVideo.split('.').last == "mp4"
+		s3.SubirVideoSinConvert arcVideo,arcVideoConv
+	else
+		s3.SubirVideoConvert arcVideo
+                ConversionVideo arcVideo,arcVideoConv
+	end
+	dynamo.ActualizarVideoCovertido m.body.to_s,"https://s3.amazonaws.com/p4videos-convertidos/" + arcVideoConv
 	NotificaEmail correo,nombre
-	EliminaArchivos arcVideo,arcVideoConv
+	EliminaArchivos arcVideo
 	sqs.ElimnarMensaje m
 end
 
